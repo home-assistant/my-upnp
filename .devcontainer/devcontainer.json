@@ -1,5 +1,5 @@
 {
-	"name": "Plugin Observer",
+	"name": "My-Upnp",
 	"build": {
 		"dockerfile": "Dockerfile",
 		"args": {
