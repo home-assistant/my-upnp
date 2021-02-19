@@ -163,7 +163,7 @@ func cleanup() {
 	}
 
 	for {
-		time.Sleep(time.Second * 5)
+		time.Sleep(time.Minute * 5)
 		database.Range(internalFunc)
 	}
 }
