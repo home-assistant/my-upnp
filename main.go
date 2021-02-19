@@ -14,10 +14,9 @@ const lifetime time.Duration = 1 * time.Hour
 var database sync.Map
 
 type CoreInstance struct {
-	Address net.IP    `json:"address"`
-	Url     string    `json:"url"`
-	Name    string    `json:"name"`
-	Added   time.Time `json:"-"`
+	Url   string    `json:"url"`
+	Name  string    `json:"name"`
+	Added time.Time `json:"-"`
 }
 
 type DataRecord struct {
@@ -66,8 +65,19 @@ func registerDevice(w http.ResponseWriter, r *http.Request) {
 	// Init record
 	ip := getIpAddress(r)
 
-	// record
-	record := DataRecord{sync.RWMutex{}, ip, []CoreInstance{}}
+	// load data
+	record := &DataRecord{sync.RWMutex{}, ip, []CoreInstance{}}
+	data, isNew := database.LoadOrStore(ip, record)
+
+	if !isNew {
+		record = data.(*DataRecord)
+	}
+	record.Mutex.Lock()
+	defer record.Mutex.Unlock()
+
+	// Add instance
+	instance := CoreInstance{t.Url, t.Name, time.Now()}
+	record.Instances = append(record.Instances, instance)
 
 	w.WriteHeader(http.StatusOK)
 }
@@ -113,11 +123,14 @@ func getIpAddress(r *http.Request) net.IPNet {
 	}
 
 	// Generate the key based on IPv6 or IPv4
+	var network *net.IPNet
 	if ip.To16() != nil {
-		return net.IPNet(ip, net.CIDRMask(64, 128))
+		_, network, _ = net.ParseCIDR(ip.String() + "/64")
 	} else {
-		return net.IPNet(ip, net.CIDRMask(32, 32))
+		_, network, _ = net.ParseCIDR(ip.String() + "/32")
 	}
+
+	return *network
 }
 
 func cleanup() {
