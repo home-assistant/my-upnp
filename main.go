@@ -61,13 +61,12 @@ func registerDevice(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 400)
 		return
 	}
-
-	// Init record
 	ip := getIpAddress(r)
+	log.Printf("Get register request from %s", ip.String())
 
 	// load data
 	record := &DataRecord{sync.RWMutex{}, ip, []CoreInstance{}}
-	data, isNew := database.LoadOrStore(ip, record)
+	data, isNew := database.LoadOrStore(ip.String(), record)
 
 	if !isNew {
 		record = data.(*DataRecord)
@@ -95,9 +94,10 @@ func listDevices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ip := getIpAddress(r)
+	log.Printf("Get list request from %s", ip.String())
 
 	// Instances
-	data, ok := database.Load(ip)
+	data, ok := database.Load(ip.String())
 	if !ok {
 		return
 	}
@@ -131,7 +131,7 @@ func getIpAddress(r *http.Request) net.IPNet {
 
 	// Generate the key based on IPv6 or IPv4
 	var network *net.IPNet
-	if ip.To16() != nil {
+	if ip.To4() == nil {
 		_, network, _ = net.ParseCIDR(ip.String() + "/64")
 	} else {
 		_, network, _ = net.ParseCIDR(ip.String() + "/32")
@@ -143,27 +143,21 @@ func getIpAddress(r *http.Request) net.IPNet {
 func cleanup() {
 	internalFunc := func(key interface{}, value interface{}) bool {
 		record := value.(*DataRecord)
-		new := []CoreInstance{}
 
 		// RWLock for edit data
 		record.Mutex.Lock()
 		defer record.Mutex.Unlock()
 
 		// Update active list
-		updated := false
-		for _, instance := range record.Instances {
-			if time.Since(instance.Added) < lifetime {
-				new = append(new, instance)
-			} else {
-				updated = true
+		for i := len(record.Instances) - 1; i >= 0; i-- {
+			if time.Since(record.Instances[i].Added) > lifetime {
+				record.Instances = append(record.Instances[:i], record.Instances[i+1:]...)
 			}
 		}
 
 		// Changes with need update the store
-		if len(new) == 0 {
+		if len(record.Instances) == 0 {
 			database.Delete(key)
-		} else if updated {
-			database.Store(key, record)
 		}
 
 		return true
