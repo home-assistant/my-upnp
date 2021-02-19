@@ -77,6 +77,13 @@ func registerDevice(w http.ResponseWriter, r *http.Request) {
 
 	// Add instance
 	instance := CoreInstance{t.Url, t.Name, time.Now()}
+
+	// Filter old out
+	for i := len(record.Instances) - 1; i >= 0; i-- {
+		if record.Instances[i].Url == instance.Url {
+			record.Instances = append(record.Instances[:i], record.Instances[i+1:]...)
+		}
+	}
 	record.Instances = append(record.Instances, instance)
 
 	w.WriteHeader(http.StatusOK)
