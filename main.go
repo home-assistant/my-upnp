@@ -14,10 +14,16 @@ const lifetime time.Duration = 1 * time.Hour
 var database sync.Map
 
 type CoreInstance struct {
-	Address net.IPNet `json:"address"`
-	Url     string    `json:"url"`
-	Name    string    `json:"name"`
-	Added   time.Time `json:"added"`
+	Address net.IPAddr `json:"address"`
+	Url     string     `json:"url"`
+	Name    string     `json:"name"`
+	Added   time.Time  `json:"-"`
+}
+
+type DataRecord struct {
+	Mutex     sync.RWMutex
+	Network   net.IPNet
+	Instances []CoreInstance
 }
 
 func main() {
@@ -70,12 +76,16 @@ func listDevices(w http.ResponseWriter, r *http.Request) {
 
 func cleanup() {
 	internalFunc := func(key interface{}, value interface{}) bool {
-		instances := value.([]CoreInstance)
+		record := value.(*DataRecord)
 		new := []CoreInstance{}
+
+		// RWLock for edit data
+		record.Mutex.RLock()
+		defer record.Mutex.RUnlock()
 
 		// Update active list
 		updated := false
-		for _, instance := range instances {
+		for _, instance := range record.Instances {
 			if time.Since(instance.Added) < lifetime {
 				new = append(new, instance)
 			} else {
@@ -87,7 +97,7 @@ func cleanup() {
 		if len(new) == 0 {
 			database.Delete(key)
 		} else if updated {
-			database.Store(key, new)
+			database.Store(key, record)
 		}
 
 		return true
