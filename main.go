@@ -14,10 +14,10 @@ const lifetime time.Duration = 1 * time.Hour
 var database sync.Map
 
 type CoreInstance struct {
-	Address net.IPAddr `json:"address"`
-	Url     string     `json:"url"`
-	Name    string     `json:"name"`
-	Added   time.Time  `json:"-"`
+	Address net.IP    `json:"address"`
+	Url     string    `json:"url"`
+	Name    string    `json:"name"`
+	Added   time.Time `json:"-"`
 }
 
 type DataRecord struct {
@@ -63,6 +63,12 @@ func registerDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Init record
+	ip := getIpAddress(r)
+
+	// record
+	record := DataRecord{sync.RWMutex{}, ip, []CoreInstance{}}
+
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -71,7 +77,47 @@ func listDevices(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		return
 	}
+	ip := getIpAddress(r)
 
+	// Instances
+	data, ok := database.Load(ip)
+	if !ok {
+		return
+	}
+	record := data.(*DataRecord)
+
+	record.Mutex.RLock()
+	defer record.Mutex.RUnlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(record.Instances); err != nil {
+		log.Panicf(err.Error())
+	}
+}
+
+func getIpAddress(r *http.Request) net.IPNet {
+	_, isProxy := r.Header["X-Forwarded-For"]
+
+	// Get IP
+	var IPAddress string
+	if isProxy {
+		IPAddress = r.Header.Get("X-Forwarded-For")
+	} else {
+		IPAddress, _, _ = net.SplitHostPort(r.RemoteAddr)
+	}
+
+	// Parse IP
+	ip := net.ParseIP(IPAddress)
+	if ip == nil {
+		log.Panicf("Can't parse %s", IPAddress)
+	}
+
+	// Generate the key based on IPv6 or IPv4
+	if ip.To16() != nil {
+		return net.IPNet(ip, net.CIDRMask(64, 128))
+	} else {
+		return net.IPNet(ip, net.CIDRMask(32, 32))
+	}
 }
 
 func cleanup() {
@@ -80,8 +126,8 @@ func cleanup() {
 		new := []CoreInstance{}
 
 		// RWLock for edit data
-		record.Mutex.RLock()
-		defer record.Mutex.RUnlock()
+		record.Mutex.Lock()
+		defer record.Mutex.Unlock()
 
 		// Update active list
 		updated := false
