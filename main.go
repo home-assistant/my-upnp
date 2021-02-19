@@ -66,11 +66,11 @@ func registerDevice(w http.ResponseWriter, r *http.Request) {
 
 	// load data
 	record := &DataRecord{sync.RWMutex{}, ip, []CoreInstance{}}
-	data, isNew := database.LoadOrStore(ip.String(), record)
-
-	if !isNew {
+	data, loaded := database.LoadOrStore(ip.String(), record)
+	if loaded {
 		record = data.(*DataRecord)
 	}
+
 	record.Mutex.Lock()
 	defer record.Mutex.Unlock()
 
