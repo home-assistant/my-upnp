@@ -65,10 +65,14 @@ func registerDevice(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Get register request from %s", ip.String())
 
 	// load data
-	record := &DataRecord{sync.RWMutex{}, ip, []CoreInstance{}}
-	data, loaded := database.LoadOrStore(ip.String(), record)
+	var record *DataRecord
+
+	data, loaded := database.Load(ip.String())
 	if loaded {
 		record = data.(*DataRecord)
+	} else {
+		record = &DataRecord{sync.RWMutex{}, ip, []CoreInstance{}}
+		defer database.Store(ip.String(), record)
 	}
 
 	record.Mutex.Lock()
