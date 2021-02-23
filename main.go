@@ -7,11 +7,15 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/spf13/viper"
 )
 
 const lifetime time.Duration = 1 * time.Hour
+const env_forwarded string = "USE_FORWARDED_FOR"
 
 var database sync.Map
+var gProxy bool
 
 type CoreInstance struct {
 	Url   string    `json:"url"`
@@ -27,12 +31,17 @@ type DataRecord struct {
 
 func main() {
 
+	viper.SetDefault(env_forwarded, false)
+	viper.AutomaticEnv()
+
+	gProxy = viper.GetBool(env_forwarded)
+
 	http.HandleFunc("/api/register", registerDevice)
 	http.HandleFunc("/api/devices", listDevices)
 
 	go cleanup()
 
-	log.Print("Start webserver on http://0.0.0.0:80")
+	log.Printf("Start webserver on http://0.0.0.0:80 (Proxy-Support: %t)", gProxy)
 	http.ListenAndServe(":80", nil)
 }
 
@@ -121,7 +130,7 @@ func getIpAddress(r *http.Request) net.IPNet {
 
 	// Get IP
 	var IPAddress string
-	if isProxy {
+	if isProxy && gProxy {
 		IPAddress = r.Header.Get("X-Forwarded-For")
 	} else {
 		IPAddress, _, _ = net.SplitHostPort(r.RemoteAddr)
